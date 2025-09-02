@@ -1,51 +1,47 @@
-+12V Car Battery
-                  │
-                  │
-                 [Buck 5V]
-                  │
-     +5V ---------+-----------------> Nano VCC
-                  |
-                  +----------------> OLED VCC
-                  
-GND --------------+-----------------> Nano GND
-                  |
-                  +-----------------> OLED GND
-                  |
-                  +-----------------> DLC Pin4 (Chassis GND)
+Honda 3-Pin DLC (OBD1)
+                  ----------------------
+ Pin1: K-Line  ----+----------------------------------+
+                   |                                  |
+                   |                                [1kΩ]
+                   |                                  |
+                   |                                 Nano RX (D3)
+                   |                                  |
+                   |                               Schottky Diode
+                   |                        Anode → Nano RX
+                   |                        Cathode → DLC Pin1
+                   |                                  |
+                   |                               47µF Capacitor
+                   |                                  |
+                   +--------------------------------> GND rail
+                   
+ Pin2: +12V  -----[0.5A Fuse]----> Buck IN (+12V)
+                                     |
+                                     +--> Buck OUT 5V --> Nano VCC
+                                     +--> Buck OUT 5V --> OLED VCC
+ Pin3: GND  -------------------------> GND rail
+                                     +--> Nano GND
+                                     +--> OLED GND
 
-Honda DLC 3-pin (Prelude '93):
-    Pin2 = +12V
-    Pin7 = K-Line
-    Pin4 = GND
-
-K-Line Protection & Nano RX Wiring:
-
- DLC Pin7 (K-Line)
-       │
-      [1kΩ]
-       │
-       +-------> Nano RX (Pin3)
-       │
-      ┌─────────┐
-      │Schottky │
-      │Diode    │
-      │ Anode→RX│
-      │ Cathode→DLC7
-      └─────────┘
-       │
-      [47µF]
-       │
-      GND
-
-Nano TX (Pin2) ───────> K-Line TX (through protection if desired, usually direct)
+Nano TX (D2) -------------------------> K-Line TX (optional small resistor to DLC Pin1)
 
 OLED:
- Nano A4 (SDA) --------> OLED SDA
- Nano A5 (SCL) --------> OLED SCL
+  SDA ---------------------------> Nano A4
+  SCL ---------------------------> Nano A5
+  VCC --------------------------> Buck 5V OUT
+  GND --------------------------> GND rail
 
-Optional Notes:
-- Schottky diode orientation is critical: **Anode to Nano RX**, **Cathode to DLC K-Line**.  
-- 1kΩ resistor in series protects the Nano from current spikes.  
-- 47µF capacitor across K-Line to GND smooths transients.  
-- Buck converts 12V to stable 5V for Nano and OLED.  
-- Fuse 0.5A on DLC Pin2 (+12V) for safety.
+Protection Component Notes:
+- **1kΩ series resistor**: limits current to Nano RX
+- **Schottky diode**: clamps voltage, protects RX (Anode → Nano RX, Cathode → DLC K-Line)
+- **47µF capacitor**: smooths K-Line voltage transients
+- **0.5A fuse**: protects 12V supply to buck and DLC Pin2
+- **Buck converter**: powers Nano and OLED safely from 12V car battery
+
+Summary:
+- All power comes from DLC Pin2 (+12V)
+- GND from DLC Pin3
+- K-Line data from DLC Pin1, protected with resistor + diode + capacitor
+- Nano TX/RX handle bidirectional K-Line communication
+- OLED displays live RPM, Fuel %, Coolant temp
+- USB Serial logs all live data
+- EEPROM stores last readings; no SD or Bluetooth needed
