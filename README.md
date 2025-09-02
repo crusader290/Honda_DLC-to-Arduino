@@ -1,6 +1,6 @@
 ![Honduino](ascii-art-text.png)
 # Honduino (Honda_DLC-to-Arduino)
-Interface Honda OBD (K-line) using a special protection circuit, Arduino and i2c screens
+Interface Honda OBD (K-line) Cars using a special protection circuit, Arduino and i2c screens
   
 **K-Line Protection / Interface**
   
