@@ -15,7 +15,7 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 #define K_RX 3
 #define K_TX 2
 SoftwareSerial KLine(K_RX, K_TX); // RX, TX
-#define MAX_FRAME 64
+#define MAX_FRAME 128
 byte frameBuf[MAX_FRAME];
 int frameLen = 0;
 
@@ -150,52 +150,77 @@ void loop() {
   while(Serial.available()){
     byte b = Serial.read();
     KLine.write(b);
-    Serial.print(F("TX->ECU: 0x")); if(b<0x10) Serial.print("0"); Serial.println(b, HEX);
   }
 
-  // Read ECU -> Nano into frameBuf
+  // Read ECU -> Nano
   while(KLine.available()){
     byte b = KLine.read();
     if(frameLen < MAX_FRAME) frameBuf[frameLen++] = b;
   }
 
-  if(frameLen>0){
-    parseFrame(frameBuf, frameLen);
+  // Multi-frame handling
+  while(frameLen >= 5){ // minimum frame length
+    int frameStart = -1;
 
-    // Display order: Speed, RPM, Fuel, Temp, ECU V, Timing Advance, MAP, STFT, LTFT, IACV
-    display.clearDisplay();
-    display.setCursor(0,0);
-    display.print("SPD: "); display.print(vss_kmh); display.println(" km/h");
-    display.print("RPM: "); display.print(rpm); display.println(" rpm");
-    display.print("Fuel: "); display.print(fuelPct); display.println("%");
-    display.print("Temp: "); display.print(coolantC); display.println((char)247); display.println("C");
-    display.print("ECU V: "); display.print(ecuVoltage,1); display.println("V");
-    display.print("Timing: "); display.print(timingAdvance); display.println((char)247);
-    display.print("MAP: "); display.print(map_kPa); display.print(" kPa / "); display.print(map_psi,1); display.println(" psi");
-    display.print("STFT: "); display.print(stft); display.println("%");
-    display.print("LTFT: "); display.print(ltft); display.println("%");
-    display.print("IACV: "); display.print(iacvPct); display.println("%");
-    display.display();
-
-    // USB Logging
-    Serial.print("Speed: "); Serial.print(vss_kmh); Serial.println(" km/h");
-    Serial.print("RPM: "); Serial.print(rpm); Serial.println(" rpm");
-    Serial.print("Fuel: "); Serial.print(fuelPct); Serial.println("%");
-    Serial.print("Temp: "); Serial.print(coolantC); Serial.println(" C");
-    Serial.print("ECU V: "); Serial.print(ecuVoltage,1); Serial.println(" V");
-    Serial.print("Timing Advance: "); Serial.print(timingAdvance); Serial.println(" °");
-    Serial.print("MAP: "); Serial.print(map_kPa); Serial.print(" kPa / "); Serial.print(map_psi,1); Serial.println(" psi");
-    Serial.print("STFT: "); Serial.print(stft); Serial.println("%");
-    Serial.print("LTFT: "); Serial.print(ltft); Serial.println("%");
-    Serial.print("IACV: "); Serial.print(iacvPct); Serial.println("%");
-    Serial.println("---------------------------");
-
-    // Save to EEPROM every 5s
-    if(millis() - lastEEPROM > 5000){
-      saveEEPROM();
-      lastEEPROM = millis();
+    // Find start byte 0x68
+    for(int i=0;i<frameLen-1;i++){
+      if(frameBuf[i] == 0x68){
+        frameStart = i;
+        break;
+      }
     }
 
-    frameLen = 0; // reset buffer
+    if(frameStart < 0){
+      frameLen = 0; // no valid start found
+      break;
+    }
+
+    // Estimate frame length from header
+    int expectedLen = frameBuf[frameStart + 1]; // typical Honda frame second byte = length
+    if(frameStart + expectedLen + 3 > frameLen) break; // wait for full frame
+
+    // Parse complete frame
+    parseFrame(frameBuf + frameStart, expectedLen + 3);
+
+    // Shift buffer to remove parsed frame
+    int remaining = frameLen - (frameStart + expectedLen + 3);
+    if(remaining > 0){
+      memmove(frameBuf, frameBuf + frameStart + expectedLen + 3, remaining);
+    }
+    frameLen = remaining;
+  }
+
+  // Display order: Speed, RPM, Fuel, Temp, ECU V, Timing Advance, MAP, IACV, STFT, LTFT
+  display.clearDisplay();
+  display.setCursor(0,0);
+  display.print("SPD: "); display.print(vss_kmh); display.println(" km/h");
+  display.print("RPM: "); display.print(rpm); display.println(" rpm");
+  display.print("Fuel: "); display.print(fuelPct); display.println("%");
+  display.print("Temp: "); display.print(coolantC); display.println((char)247); display.println("C");
+  display.print("ECU V: "); display.print(ecuVoltage,1); display.println("V");
+  display.print("Timing: "); display.print(timingAdvance); display.println((char)247);
+  display.print("MAP: "); display.print(map_kPa); display.print(" kPa / "); display.print(map_psi,1); display.println(" psi");
+  display.print("IACV: "); display.print(iacvPct); display.println("%");
+  display.print("STFT: "); display.print(stft); display.println("%");
+  display.print("LTFT: "); display.print(ltft); display.println("%");
+  display.display();
+
+  // USB Logging
+  Serial.print("Speed: "); Serial.print(vss_kmh); Serial.println(" km/h");
+  Serial.print("RPM: "); Serial.print(rpm); Serial.println(" rpm");
+  Serial.print("Fuel: "); Serial.print(fuelPct); Serial.println("%");
+  Serial.print("Temp: "); Serial.print(coolantC); Serial.println(" C");
+  Serial.print("ECU V: "); Serial.print(ecuVoltage,1); Serial.println(" V");
+  Serial.print("Timing Advance: "); Serial.print(timingAdvance); Serial.println(" °");
+  Serial.print("MAP: "); Serial.print(map_kPa); Serial.print(" kPa / "); Serial.print(map_psi,1); Serial.println(" psi");
+  Serial.print("IACV: "); Serial.print(iacvPct); Serial.println("%");
+  Serial.print("STFT: "); Serial.print(stft); Serial.println("%");
+  Serial.print("LTFT: "); Serial.print(ltft); Serial.println("%");
+  Serial.println("---------------------------");
+
+  // Save to EEPROM every 5s
+  if(millis() - lastEEPROM > 5000){
+    saveEEPROM();
+    lastEEPROM = millis();
   }
 }
