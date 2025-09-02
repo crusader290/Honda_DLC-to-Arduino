@@ -2,7 +2,7 @@
 # Honda_DLC-to-Arduino
 Interface Honda OBD (K-line) using a special circuit, Arduino and i2c screens
   
-** K-Line Protection / Interface  **
+**K-Line Protection / Interface**
   
 1 × 2N3904 NPN transistor (K-Line level shifting, optional depending on circuit)  
   
