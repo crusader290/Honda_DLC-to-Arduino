@@ -30,6 +30,7 @@ float map_psi = 0;
 int vss_kmh = 0;
 float ecuVoltage = 0.0;
 int iacvPct = 0;
+int timingAdvance = 0;
 
 // ---------- EEPROM Addresses ----------
 #define ADDR_RPM 0
@@ -100,6 +101,10 @@ void parseFrame(byte* data, int len){
     if(data[i]==0x20 && data[i+1]==0x05 && data[i+2]==0x22){
       ltft = (data[i+3]-128)*100/128;
     }
+    // Timing Advance
+    if(data[i]==0x20 && data[i+1]==0x05 && data[i+2]==0x26){
+      timingAdvance = data[i+3];
+    }
     // MAP
     if(data[i]==0x20 && data[i+1]==0x05 && data[i+2]==0x12){
       map_kPa = data[i+3];
@@ -157,7 +162,7 @@ void loop() {
   if(frameLen>0){
     parseFrame(frameBuf, frameLen);
 
-    // Display order: Speed, RPM, Fuel, Temp, ECU V, MAP, STFT, LTFT, IACV
+    // Display order: Speed, RPM, Fuel, Temp, ECU V, Timing Advance, MAP, STFT, LTFT, IACV
     display.clearDisplay();
     display.setCursor(0,0);
     display.print("SPD: "); display.print(vss_kmh); display.println(" km/h");
@@ -165,6 +170,7 @@ void loop() {
     display.print("Fuel: "); display.print(fuelPct); display.println("%");
     display.print("Temp: "); display.print(coolantC); display.println((char)247); display.println("C");
     display.print("ECU V: "); display.print(ecuVoltage,1); display.println("V");
+    display.print("Timing: "); display.print(timingAdvance); display.println((char)247);
     display.print("MAP: "); display.print(map_kPa); display.print(" kPa / "); display.print(map_psi,1); display.println(" psi");
     display.print("STFT: "); display.print(stft); display.println("%");
     display.print("LTFT: "); display.print(ltft); display.println("%");
@@ -177,6 +183,7 @@ void loop() {
     Serial.print("Fuel: "); Serial.print(fuelPct); Serial.println("%");
     Serial.print("Temp: "); Serial.print(coolantC); Serial.println(" C");
     Serial.print("ECU V: "); Serial.print(ecuVoltage,1); Serial.println(" V");
+    Serial.print("Timing Advance: "); Serial.print(timingAdvance); Serial.println(" °");
     Serial.print("MAP: "); Serial.print(map_kPa); Serial.print(" kPa / "); Serial.print(map_psi,1); Serial.println(" psi");
     Serial.print("STFT: "); Serial.print(stft); Serial.println("%");
     Serial.print("LTFT: "); Serial.print(ltft); Serial.println("%");
