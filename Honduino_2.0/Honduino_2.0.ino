@@ -143,10 +143,10 @@ void setup() {
   // EEPROM load
   int rpm = 0; float fuel = 0, cool = 0; int speed = 0;
   readEEPROM(rpm, fuel, cool, speed);
-  Serial.print("Last Speed: "); Serial.println(speed);
+  Serial.print("Last Speed: "); Serial.print(speed); Serial.println(" km/h");
   Serial.print("Last RPM: "); Serial.println(rpm);
-  Serial.print("Last Fuel: "); Serial.println(fuel);
-  Serial.print("Last Coolant: "); Serial.println(cool);
+  Serial.print("Last Fuel: "); Serial.print(fuel); Serial.println("%");
+  Serial.print("Last Coolant: "); Serial.print(cool); Serial.println("°C");
 }
 
 // ---------- Loop ----------
@@ -179,21 +179,21 @@ void loop() {
 
     int y = 10;
     display.setCursor(0,y); y+=10;
-    if(speed>=0){ display.print(F("Speed: ")); display.println(speed); }
+    if(speed>=0){ display.print(F("Speed: ")); display.print(speed); display.println(F(" km/h")); }
     display.setCursor(0,y); y+=10;
     if(rpm>=0){ display.print(F("RPM: ")); display.println(rpm); }
     display.setCursor(0,y); y+=10;
-    if(fuelPct>=0){ display.print(F("Fuel: ")); display.println(fuelPct); }
+    if(fuelPct>=0){ display.print(F("Fuel: ")); display.print(fuelPct); display.println(F("%")); }
     display.setCursor(0,y); y+=10;
-    if(coolantC>=0){ display.print(F("Coolant: ")); display.println(coolantC); }
+    if(coolantC>=0){ display.print(F("Coolant: ")); display.print(coolantC); display.println(F("°C")); }
 
     display.display();
 
     // USB logging in same order
-    if(speed>=0){ printTimestamp(Serial); Serial.print(F("Vehicle Speed: ")); Serial.println(speed);}
-    if(rpm>=0){ printTimestamp(Serial); Serial.print(F("Engine RPM: ")); Serial.println(rpm);}
-    if(fuelPct>=0){ printTimestamp(Serial); Serial.print(F("Fuel Level: ")); Serial.println(fuelPct);}
-    if(coolantC>=0){ printTimestamp(Serial); Serial.print(F("Coolant Temp: ")); Serial.println(coolantC);}
+    if(speed>=0){ printTimestamp(Serial); Serial.print(F("Vehicle Speed: ")); Serial.print(speed); Serial.println(F(" km/h")); }
+    if(rpm>=0){ printTimestamp(Serial); Serial.print(F("Engine RPM: ")); Serial.println(rpm); }
+    if(fuelPct>=0){ printTimestamp(Serial); Serial.print(F("Fuel Level: ")); Serial.print(fuelPct); Serial.println(F("%")); }
+    if(coolantC>=0){ printTimestamp(Serial); Serial.print(F("Coolant Temp: ")); Serial.print(coolantC); Serial.println(F("°C")); }
 
     // Save EEPROM every 5s
     if(millis() - lastEEPROM > 5000){
