@@ -1,7 +1,8 @@
+#include <Arduino.h>
+#include <SoftwareSerial.h>
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
-#include <SoftwareSerial.h>
 #include <EEPROM.h>
 
 // ---------- OLED Setup ----------
@@ -10,7 +11,7 @@
 #define OLED_RESET -1
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
-// ---------- K-line Setup ----------
+// ---------- K-line pins ----------
 #define K_RX 3
 #define K_TX 2
 SoftwareSerial KLine(K_RX, K_TX); // RX, TX
@@ -56,24 +57,20 @@ void readEEPROM() {
   EEPROM.get(ADDR_LTFT, ltft);
 }
 
-// ---------- Setup ----------
-void setup() {
-  pinMode(K_TX, OUTPUT);
-  digitalWrite(K_TX, HIGH);
+// ---------- Honda ECU Init Sequence ----------
+byte hondaInitBytesFull[] = {0x68, 0x6A, 0xF5, 0xAF, 0xBF, 0xB3, 0xB2, 0xC1, 0xDB, 0xB3, 0xE9};
+const int numInitBytes = sizeof(hondaInitBytesFull)/sizeof(hondaInitBytesFull[0]);
 
-  Serial.begin(115200);
-  KLine.begin(10400);
-
-  if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)){
-    Serial.println(F("OLED init failed"));
-    for(;;);
+void sendHondaInit() {
+  Serial.println(F("Starting ECU Init Sequence..."));
+  for(int i=0;i<numInitBytes;i++){
+    KLine.write(hondaInitBytesFull[i]);
+    delay(50); // small delay between bytes
+    Serial.print(F("Sent init byte: 0x")); 
+    if(hondaInitBytesFull[i]<0x10) Serial.print("0");
+    Serial.println(hondaInitBytesFull[i], HEX);
   }
-
-  display.clearDisplay();
-  display.setTextSize(1);
-  display.setTextColor(SSD1306_WHITE);
-
-  readEEPROM();
+  Serial.println(F("ECU Init Complete"));
 }
 
 // ---------- Parse ECU Frame ----------
@@ -119,11 +116,39 @@ void parseFrame(byte* data, int len){
   }
 }
 
+// ---------- Setup ----------
+void setup() {
+  pinMode(K_TX, OUTPUT);
+  digitalWrite(K_TX, HIGH);
+
+  Serial.begin(115200);
+  KLine.begin(10400);
+
+  if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)){
+    Serial.println(F("OLED init failed"));
+    for(;;);
+  }
+
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+
+  sendHondaInit(); // run ECU init
+  readEEPROM();     // load last values
+}
+
 // ---------- Loop ----------
 void loop() {
   static unsigned long lastEEPROM = 0;
 
-  // Read K-Line
+  // Forward USB -> ECU
+  while(Serial.available()){
+    byte b = Serial.read();
+    KLine.write(b);
+    Serial.print(F("TX->ECU: 0x")); if(b<0x10) Serial.print("0"); Serial.println(b, HEX);
+  }
+
+  // Read ECU -> Nano into frameBuf
   while(KLine.available()){
     byte b = KLine.read();
     if(frameLen < MAX_FRAME) frameBuf[frameLen++] = b;
@@ -146,12 +171,24 @@ void loop() {
     display.print("IACV: "); display.print(iacvPct); display.println("%");
     display.display();
 
+    // USB Logging
+    Serial.print("Speed: "); Serial.print(vss_kmh); Serial.println(" km/h");
+    Serial.print("RPM: "); Serial.print(rpm); Serial.println(" rpm");
+    Serial.print("Fuel: "); Serial.print(fuelPct); Serial.println("%");
+    Serial.print("Temp: "); Serial.print(coolantC); Serial.println(" C");
+    Serial.print("ECU V: "); Serial.print(ecuVoltage,1); Serial.println(" V");
+    Serial.print("MAP: "); Serial.print(map_kPa); Serial.print(" kPa / "); Serial.print(map_psi,1); Serial.println(" psi");
+    Serial.print("STFT: "); Serial.print(stft); Serial.println("%");
+    Serial.print("LTFT: "); Serial.print(ltft); Serial.println("%");
+    Serial.print("IACV: "); Serial.print(iacvPct); Serial.println("%");
+    Serial.println("---------------------------");
+
     // Save to EEPROM every 5s
     if(millis() - lastEEPROM > 5000){
       saveEEPROM();
       lastEEPROM = millis();
     }
 
-    frameLen = 0;
+    frameLen = 0; // reset buffer
   }
 }
