@@ -1,0 +1,40 @@
+
++12V Car Battery
+                 │
+                 │
+                [Buck 5V]─────+───────────+5V to Nano VCC
+                 │            │
+                 │            └──+5V to OLED VCC
+                 │
+                 │
+                 └─[0.5A fuse]─────> Honda DLC Pin 2 (+12V)
+                 
+Honda DLC 3-pin layout (Prelude '93):
+
+       +12V ── Pin 2
+       K-Line ── Pin 7 (connected below)
+       GND ── Pin 4
+
+K-Line protection network (for Nano RX):
+
+Honda DLC Pin7
+   │
+   ├─[1kΩ resistor]──+─── KLine RX (Nano Pin3)
+   │                  │
+   │                ┌─┴─┐
+   │                │Schottky Diode│
+   │                │ Anode → KLine RX, Cathode → DLC 7
+   │                └────┘
+   │
+   └─[47µF Capacitor]─┴─ GND (smooths K-Line voltage)
+
+Nano Connections:
+
+Nano Pin 2 (TX) ──── KLine TX through protection network
+Nano Pin 3 (RX) ──── KLine RX through 1kΩ + Schottky
+Nano GND ─────────── Car chassis / DLC Pin4
+Nano VCC ─────────── Buck 5V (from 12V input)
+OLED SDA ─────────── Nano A4
+OLED SCL ─────────── Nano A5
+
+Optional EEPROM storage is onboard; no SD card needed 
