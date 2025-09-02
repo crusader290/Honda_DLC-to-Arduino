@@ -20,14 +20,6 @@ SoftwareSerial KLine(K_RX, K_TX); // RX, TX
 byte frameBuf[MAX_FRAME];
 int frameLen = 0;
 
-// ---------- ECU Init Sequences ----------
-byte hondaInitBytes[][2] = {
-  {0x68, 0x6A},
-  {0x81, 0x13},
-  {0x72, 0x05}
-};
-const int numInits = sizeof(hondaInitBytes)/sizeof(hondaInitBytes[0]);
-
 // ---------- ECU Flags ----------
 struct ECUFlag {
   const char* name;
@@ -70,17 +62,20 @@ void printTimestamp(Print &p){
 #define ADDR_RPM 0
 #define ADDR_FUEL 2
 #define ADDR_COOL 6
+#define ADDR_SPEED 10
 
-void saveEEPROM(int rpm, float fuelPct, float coolantC){
+void saveEEPROM(int rpm, float fuelPct, float coolantC, int speed){
   EEPROM.put(ADDR_RPM, rpm);
   EEPROM.put(ADDR_FUEL, fuelPct);
   EEPROM.put(ADDR_COOL, coolantC);
+  EEPROM.put(ADDR_SPEED, speed);
 }
 
-void readEEPROM(int &rpm, float &fuelPct, float &coolantC){
+void readEEPROM(int &rpm, float &fuelPct, float &coolantC, int &speed){
   EEPROM.get(ADDR_RPM, rpm);
   EEPROM.get(ADDR_FUEL, fuelPct);
   EEPROM.get(ADDR_COOL, coolantC);
+  EEPROM.get(ADDR_SPEED, speed);
 }
 
 // ---------- Parse ECU Flags ----------
@@ -100,16 +95,25 @@ void parseECUFlags(byte* data, int len) {
   }
 }
 
-// ---------- Parse RPM/Fuel/Coolant ----------
-void parseECUValues(byte* data, int len, int &rpm, float &fuelPct, float &coolantC){
-  rpm = -1; fuelPct = -1; coolantC = -1;
+// ---------- Parse RPM/Fuel/Coolant/Speed ----------
+void parseECUValues(byte* data, int len, int &rpm, float &fuelPct, float &coolantC, int &speed){
+  rpm = -1; fuelPct = -1; coolantC = -1; speed = -1;
   for(int i=0;i<len-3;i++){
     if(data[i]==0x20 && data[i+1]==0x05) rpm = ((int)data[i+2]*256 + data[i+3])/4;
     if(data[i]==0x20 && data[i+1]==0x0A) fuelPct = data[i+2]/2.55;
     if(data[i]==0x20 && data[i+1]==0x06) coolantC = data[i+2]-40;
+    if(data[i]==0x21 && data[i+1]==0x05) speed = data[i+2]; // typical 1-byte km/h
   }
 }
 
+// ---------- Honda Full Init Sequence ----------
+byte hondaInitBytesFull[] = {
+  0x68, 0x6A, 0xF5, 0xAF, 0xBF, 0xB3, 0xB2,
+  0xC1, 0xDB, 0xB3, 0xE9
+};
+const int numInitBytes = sizeof(hondaInitBytesFull)/sizeof(hondaInitBytesFull[0]);
+
+// ---------- Setup ----------
 void setup() {
   pinMode(K_TX, OUTPUT);
   digitalWrite(K_TX, HIGH);
@@ -124,28 +128,28 @@ void setup() {
   display.setTextSize(1);
   display.setTextColor(SSD1306_WHITE);
 
-  // ECU Init
-  for(int i=0;i<numInits;i++){
-    KLine.write(hondaInitBytes[i][0]);
-    delay(25);
-    KLine.write(hondaInitBytes[i][1]);
-    delay(100);
+  // ECU Init with full sequence
+  Serial.println(F("Starting ECU Init Sequence..."));
+  for(int i=0;i<numInitBytes;i++){
+    KLine.write(hondaInitBytesFull[i]);
+    delay(50); // small delay between bytes
     printTimestamp(Serial);
-    Serial.print(F("Sent init: "));
-    Serial.print(hondaInitBytes[i][0], HEX); Serial.print(" ");
-    Serial.println(hondaInitBytes[i][1], HEX);
+    Serial.print(F("Sent init byte: 0x")); 
+    if(hondaInitBytesFull[i]<0x10) Serial.print("0");
+    Serial.println(hondaInitBytesFull[i], HEX);
   }
-
   Serial.println(F("ECU Init Complete"));
 
   // EEPROM load
-  int rpm = 0; float fuel = 0, cool = 0;
-  readEEPROM(rpm, fuel, cool);
+  int rpm = 0; float fuel = 0, cool = 0; int speed = 0;
+  readEEPROM(rpm, fuel, cool, speed);
+  Serial.print("Last Speed: "); Serial.println(speed);
   Serial.print("Last RPM: "); Serial.println(rpm);
   Serial.print("Last Fuel: "); Serial.println(fuel);
   Serial.print("Last Coolant: "); Serial.println(cool);
 }
 
+// ---------- Loop ----------
 void loop() {
   static unsigned long lastEEPROM = 0;
 
@@ -163,17 +167,19 @@ void loop() {
     if(frameLen < MAX_FRAME) frameBuf[frameLen++] = b;
   }
 
-  // If we have a complete frame (simplified: any data in buffer)
+  // If we have a complete frame
   if(frameLen>0){
     display.clearDisplay();
     display.setCursor(0,0);
     display.println(F("K-Line Live Data:"));
     
-    int rpm; float fuelPct, coolantC;
-    parseECUValues(frameBuf, frameLen, rpm, fuelPct, coolantC);
+    int rpm; float fuelPct, coolantC; int speed;
+    parseECUValues(frameBuf, frameLen, rpm, fuelPct, coolantC, speed);
     parseECUFlags(frameBuf, frameLen);
 
     int y = 10;
+    display.setCursor(0,y); y+=10;
+    if(speed>=0){ display.print(F("Speed: ")); display.println(speed); }
     display.setCursor(0,y); y+=10;
     if(rpm>=0){ display.print(F("RPM: ")); display.println(rpm); }
     display.setCursor(0,y); y+=10;
@@ -183,15 +189,16 @@ void loop() {
 
     display.display();
 
-    // USB logging
+    // USB logging in same order
+    if(speed>=0){ printTimestamp(Serial); Serial.print(F("Vehicle Speed: ")); Serial.println(speed);}
     if(rpm>=0){ printTimestamp(Serial); Serial.print(F("Engine RPM: ")); Serial.println(rpm);}
     if(fuelPct>=0){ printTimestamp(Serial); Serial.print(F("Fuel Level: ")); Serial.println(fuelPct);}
     if(coolantC>=0){ printTimestamp(Serial); Serial.print(F("Coolant Temp: ")); Serial.println(coolantC);}
 
     // Save EEPROM every 5s
     if(millis() - lastEEPROM > 5000){
-      if(rpm>=0 && fuelPct>=0 && coolantC>=-40){
-        saveEEPROM(rpm, fuelPct, coolantC);
+      if(rpm>=0 && fuelPct>=0 && coolantC>=-40 && speed>=0){
+        saveEEPROM(rpm, fuelPct, coolantC, speed);
         lastEEPROM = millis();
       }
     }
